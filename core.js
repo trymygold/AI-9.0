@@ -1,4 +1,4 @@
-/* core.js - Jewels-Ai: Master Engine (v11.5 - Gestures & Close Button Fix) */
+/* core.js - Jewels-Ai: Master Engine (v11.6 - Fixed Mix & Match) */
 
 /* --- CONFIGURATION --- */
 const API_KEY = "AIzaSyAXG3iG2oQjUA_BpnO8dK8y-MHJ7HLrhyE"; 
@@ -208,7 +208,7 @@ function loadAsset(src, id) {
         if (IMAGE_CACHE[id]) { resolve(IMAGE_CACHE[id]); return; }
         
         const img = new Image(); 
-        img.crossOrigin = 'anonymous'; // ESSENTIAL: Allows taking screenshot of canvas
+        img.crossOrigin = 'anonymous'; 
         const safeSrc = src + (src.includes('?') ? '&' : '?') + 't=' + new Date().getTime(); 
         
         img.onload = () => { IMAGE_CACHE[id] = img; resolve(img); };
@@ -248,6 +248,30 @@ window.onload = async () => {
 };
 
 /* --- 6. LOGIC: SELECTION & STACKING --- */
+
+/* --- ADDED: Mix & Match Toggle Function --- */
+function toggleStacking() {
+    window.JewelsState.stackingEnabled = !window.JewelsState.stackingEnabled;
+    const btn = document.getElementById('stacking-btn');
+    
+    if (window.JewelsState.stackingEnabled) {
+        if(btn) btn.classList.add('active');
+        showToast("Mix & Match: ON");
+        if(concierge.active) concierge.speak("Stacking enabled. Select another category.");
+    } else {
+        if(btn) btn.classList.remove('active');
+        showToast("Mix & Match: OFF");
+        
+        // Clear other types, keep current
+        const current = window.JewelsState.currentType;
+        Object.keys(window.JewelsState.active).forEach(key => {
+            if (key !== current) window.JewelsState.active[key] = null;
+        });
+        if(concierge.active) concierge.speak("Single mode active.");
+    }
+}
+/* ------------------------------------------ */
+
 async function selectJewelryType(type) {
   if (window.JewelsState.currentType === type && type !== undefined) return;
   window.JewelsState.currentType = type;
@@ -417,7 +441,7 @@ hands.onResults((results) => {
                   // Physical RIGHT Swipe = Hand moves LEFT on screen (diff < 0) -> Next (1)
                   const dir = (diff > 0) ? -1 : 1; 
                   
-                  changeProduct(dir); // Uses hoisted function
+                  changeProduct(dir); 
                   triggerVisualFeedback(dir === -1 ? "⬅️ Previous" : "Next ➡️");
                   
                   lastGestureTime = Date.now(); 
