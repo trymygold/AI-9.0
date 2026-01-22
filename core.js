@@ -1,7 +1,6 @@
-/* core.js - Jewels-Ai: Master Engine (v12.0 - Sai Pallavi + Gemini Brain) */
+/* core.js - Jewels-Ai: Master Engine (v12.1 - Mobile Fix + Gemini + Sai Pallavi) */
 
 /* --- CONFIGURATION --- */
-// Ensure 'Generative Language API' is enabled for this key in Google Cloud Console
 const API_KEY = "AIzaSyAXG3iG2oQjUA_BpnO8dK8y-MHJ7HLrhyE"; 
 
 const DRIVE_FOLDERS = {
@@ -114,7 +113,6 @@ const concierge = {
 
     setVoice: function() {
         const voices = window.speechSynthesis.getVoices();
-        // Priority: Indian English > Google US > Default
         concierge.voice = voices.find(v => v.name.includes("India") || v.name.includes("Rishi") || v.name.includes("Google US English")) || voices[0];
     },
 
@@ -125,7 +123,7 @@ const concierge = {
         if(bubble) { bubble.innerText = text; bubble.classList.add('bubble-visible'); }
         if(avatar) avatar.classList.add('talking');
 
-        this.synth.cancel(); // Stop previous speech
+        this.synth.cancel();
 
         if (this.hasStarted) {
             const utter = new SpeechSynthesisUtterance(text);
@@ -243,6 +241,7 @@ window.onload = async () => {
     const closeLight = document.querySelector('.close-lightbox');
     if(closeLight) closeLight.onclick = closeLightbox;
 
+    // Use robust start
     await startCameraFast('user');
     setTimeout(() => { loadingStatus.style.display = 'none'; }, 2000);
     await selectJewelryType('earrings');
@@ -336,7 +335,7 @@ function initVoiceControl() {
     recognition = new SpeechRecognition(); 
     recognition.continuous = true; 
     recognition.interimResults = false; 
-    recognition.lang = 'en-IN'; // Indian English
+    recognition.lang = 'en-IN'; 
     
     recognition.onstart = () => { 
         isRecognizing = true; 
@@ -443,18 +442,77 @@ function processVoiceCommand(cmd) {
     askGemini(cmd);
 }
 
-/* --- 8. CAMERA & TRACKING --- */
+/* --- 8. CAMERA & TRACKING (MOBILE SAFE FIX) --- */
 async function startCameraFast(mode = 'user') {
+    // 1. Logic Check
     if (!coShop.isHost && coShop.active) return; 
     if (videoElement.srcObject && currentCameraMode === mode && videoElement.readyState >= 2) return;
+    
     currentCameraMode = mode;
-    if (videoElement.srcObject) { videoElement.srcObject.getTracks().forEach(track => track.stop()); }
-    if (mode === 'environment') { videoElement.classList.add('no-mirror'); } else { videoElement.classList.remove('no-mirror'); }
+    
+    // 2. Stop any existing tracks
+    if (videoElement.srcObject) { 
+        videoElement.srcObject.getTracks().forEach(track => track.stop()); 
+    }
+
+    // 3. Handle Mirroring (Selfie vs Environment)
+    if (mode === 'environment') { 
+        videoElement.classList.add('no-mirror'); 
+    } else { 
+        videoElement.classList.remove('no-mirror'); 
+    }
+
+    // 4. ROBUST CAMERA REQUEST (Mobile Friendly)
     try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: mode } });
-        videoElement.srcObject = stream;
-        videoElement.onloadeddata = () => { videoElement.play(); detectLoop(); if(!recognition) initVoiceControl(); };
-    } catch (err) { console.error("Camera Error", err); }
+        // Attempt 1: Try High Quality
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+            video: { 
+                facingMode: mode,
+                width: { ideal: 1280 }, 
+                height: { ideal: 720 } 
+            },
+            audio: false 
+        });
+        handleStreamSuccess(stream);
+
+    } catch (err) {
+        console.warn("HQ Camera failed, trying Low Quality...", err);
+        
+        try {
+            // Attempt 2: Fallback to ANY resolution (Low Quality)
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+                video: { facingMode: mode },
+                audio: false
+            });
+            handleStreamSuccess(stream);
+            
+        } catch (finalErr) {
+            // 5. ALERT THE USER
+            // If this fires, you are likely not on HTTPS
+            alert("Camera Access Failed. Please ensure you are running on a Secure Site (HTTPS) or Localhost.");
+            console.error("Camera Critical Failure", finalErr);
+            loadingStatus.innerText = "Camera Access Denied";
+        }
+    }
+}
+
+function handleStreamSuccess(stream) {
+    videoElement.srcObject = stream;
+    
+    // iOS Safari Fix: Explicitly promise play
+    videoElement.setAttribute('autoplay', '');
+    videoElement.setAttribute('muted', '');
+    videoElement.setAttribute('playsinline', '');
+    
+    const playPromise = videoElement.play();
+    if (playPromise !== undefined) {
+        playPromise.then(_ => {
+            detectLoop(); 
+            if(!recognition) initVoiceControl();
+        }).catch(error => {
+            console.log("Auto-play prevented");
+        });
+    }
 }
 
 async function detectLoop() {
