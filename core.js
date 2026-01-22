@@ -1,4 +1,4 @@
-/* core.js - Jewels-Ai: Master Engine (v12.3 - Sai Pallavi Update) */
+/* core.js - Jewels-Ai: Master Engine (v11.6 - Fixed Mix & Match) */
 
 /* --- CONFIGURATION --- */
 const API_KEY = "AIzaSyAXG3iG2oQjUA_BpnO8dK8y-MHJ7HLrhyE"; 
@@ -90,7 +90,7 @@ function triggerVisualFeedback(text) {
     setTimeout(() => { feedback.remove(); }, 1000); 
 }
 
-/* --- 2. AI CONCIERGE "SAI PALLAVI" --- */
+/* --- 2. AI CONCIERGE "NILA" --- */
 const concierge = {
     synth: window.speechSynthesis,
     voice: null,
@@ -105,8 +105,7 @@ const concierge = {
         setTimeout(() => {
             const bubble = document.getElementById('ai-bubble');
             if(bubble) {
-                // REMOVED NILA
-                bubble.innerText = "Tap to chat with Sai Pallavi"; 
+                bubble.innerText = "Tap me to activate Nila";
                 bubble.classList.add('bubble-visible');
             }
         }, 1000);
@@ -114,8 +113,7 @@ const concierge = {
 
     setVoice: function() {
         const voices = window.speechSynthesis.getVoices();
-        // Priority: Indian English -> Google US -> Default
-        concierge.voice = voices.find(v => v.name.includes("India") || v.name.includes("Rishi") || v.name.includes("Google US English")) || voices[0];
+        concierge.voice = voices.find(v => v.name.includes("Google US English") || v.name.includes("Female")) || voices[0];
     },
 
     speak: function(text) {
@@ -125,15 +123,14 @@ const concierge = {
         if(bubble) { bubble.innerText = text; bubble.classList.add('bubble-visible'); }
         if(avatar) avatar.classList.add('talking');
 
-        this.synth.cancel();
-
         if (this.hasStarted) {
+            this.synth.cancel();
             const utter = new SpeechSynthesisUtterance(text);
             utter.voice = this.voice;
             utter.rate = 1.0; 
-            utter.pitch = 1.0;
+            utter.pitch = 1.1;
             utter.onend = () => {
-                if(bubble) setTimeout(() => bubble.classList.remove('bubble-visible'), 4000);
+                if(bubble) setTimeout(() => bubble.classList.remove('bubble-visible'), 3000);
                 if(avatar) avatar.classList.remove('talking');
             };
             this.synth.speak(utter);
@@ -148,8 +145,7 @@ const concierge = {
     toggle: function() {
         if (!this.hasStarted) {
             this.hasStarted = true;
-            // REMOVED NILA
-            this.speak("Vanakkam! I am Sai Pallavi, your personal jewelry stylist. Tell me what you are looking for.");
+            this.speak("Namaste! I am Nila. I am now active. Select a jewelry category.");
             if(!voiceEnabled) toggleVoiceControl();
             return;
         }
@@ -158,7 +154,7 @@ const concierge = {
         else { 
             this.synth.cancel(); 
             const bubble = document.getElementById('ai-bubble');
-            if(bubble) bubble.innerText = "Sai Pallavi is muted"; 
+            if(bubble) bubble.innerText = "Muted"; 
         }
     }
 };
@@ -235,6 +231,7 @@ window.onload = async () => {
     coShop.init(); 
     concierge.init();
     
+    // --- FIX: MANUAL CLOSE BUTTON BINDING ---
     const closePrev = document.querySelector('.close-preview');
     if(closePrev) closePrev.onclick = closePreview;
     
@@ -243,23 +240,16 @@ window.onload = async () => {
     
     const closeLight = document.querySelector('.close-lightbox');
     if(closeLight) closeLight.onclick = closeLightbox;
+    // ----------------------------------------
 
-    // Use robust start
     await startCameraFast('user');
-    
-    // Safety check: if video paused after 2.5 seconds, show button
-    setTimeout(() => {
-        if(videoElement.paused || videoElement.readyState < 2) {
-             showStartButton();
-             loadingStatus.style.display = 'none';
-        }
-    }, 2500);
-
     setTimeout(() => { loadingStatus.style.display = 'none'; }, 2000);
     await selectJewelryType('earrings');
 };
 
 /* --- 6. LOGIC: SELECTION & STACKING --- */
+
+/* --- ADDED: Mix & Match Toggle Function --- */
 function toggleStacking() {
     window.JewelsState.stackingEnabled = !window.JewelsState.stackingEnabled;
     const btn = document.getElementById('stacking-btn');
@@ -272,6 +262,7 @@ function toggleStacking() {
         if(btn) btn.classList.remove('active');
         showToast("Mix & Match: OFF");
         
+        // Clear other types, keep current
         const current = window.JewelsState.currentType;
         Object.keys(window.JewelsState.active).forEach(key => {
             if (key !== current) window.JewelsState.active[key] = null;
@@ -279,6 +270,7 @@ function toggleStacking() {
         if(concierge.active) concierge.speak("Single mode active.");
     }
 }
+/* ------------------------------------------ */
 
 async function selectJewelryType(type) {
   if (window.JewelsState.currentType === type && type !== undefined) return;
@@ -339,186 +331,40 @@ function highlightButtonByIndex(index) {
     }
 }
 
-/* --- 7. VOICE CONTROL (SMART) --- */
+/* --- 7. VOICE CONTROL --- */
 function initVoiceControl() {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) { if(voiceBtn) voiceBtn.style.display = 'none'; return; }
-    
-    recognition = new SpeechRecognition(); 
-    recognition.continuous = true; 
-    recognition.interimResults = false; 
-    recognition.lang = 'en-IN'; 
-    
-    recognition.onstart = () => { 
-        isRecognizing = true; 
-        if(voiceBtn) { 
-            voiceBtn.style.backgroundColor = "rgba(0, 255, 0, 0.2)"; 
-            voiceBtn.style.borderColor = "#00ff00"; 
-        } 
-    };
-    
-    recognition.onresult = (event) => { 
-        if (event.results[event.results.length - 1].isFinal) {
-            const transcript = event.results[event.results.length - 1][0].transcript.trim();
-            console.log("Heard:", transcript);
-            processVoiceCommand(transcript); 
-        }
-    };
-    
-    recognition.onend = () => { 
-        isRecognizing = false; 
-        if (voiceEnabled) setTimeout(() => { try { recognition.start(); } catch(e) {} }, 500); 
-        else if(voiceBtn) { 
-            voiceBtn.style.backgroundColor = "rgba(255,255,255,0.1)"; 
-            voiceBtn.style.borderColor = "rgba(255,255,255,0.3)"; 
-        } 
-    };
-    
+    recognition = new SpeechRecognition(); recognition.continuous = true; recognition.interimResults = false; recognition.lang = 'en-US';
+    recognition.onstart = () => { isRecognizing = true; if(voiceBtn) { voiceBtn.style.backgroundColor = "rgba(0, 255, 0, 0.2)"; voiceBtn.style.borderColor = "#00ff00"; } };
+    recognition.onresult = (event) => { if (event.results[event.results.length - 1].isFinal) processVoiceCommand(event.results[event.results.length - 1][0].transcript.trim().toLowerCase()); };
+    recognition.onend = () => { isRecognizing = false; if (voiceEnabled) setTimeout(() => { try { recognition.start(); } catch(e) {} }, 500); else if(voiceBtn) { voiceBtn.style.backgroundColor = "rgba(255,255,255,0.1)"; voiceBtn.style.borderColor = "rgba(255,255,255,0.3)"; } };
     try { recognition.start(); } catch(e) {}
 }
-
-function toggleVoiceControl() { 
-    if (!recognition) { initVoiceControl(); return; } 
-    voiceEnabled = !voiceEnabled; 
-    if (!voiceEnabled) { 
-        recognition.stop(); 
-        if(voiceBtn) { voiceBtn.innerHTML = '🔇'; voiceBtn.classList.add('voice-off'); } 
-        concierge.speak("Voice disabled.");
-    } else { 
-        try { recognition.start(); } catch(e) {} 
-        if(voiceBtn) { voiceBtn.innerHTML = '🎙️'; voiceBtn.classList.remove('voice-off'); } 
-        concierge.speak("I am listening.");
-    } 
-}
-
-/* --- 7.5. GEMINI BRAIN (SAI PALLAVI) --- */
-async function askGemini(userText) {
-    const avatar = document.getElementById('ai-avatar');
-    if(avatar) avatar.classList.add('talking'); 
-
-    const systemPrompt = `
-    You are Sai Pallavi, the AI Jewelry Stylist for 'Jewels-AI'. 
-    Your tone is warm, professional, and has a slight Indian cultural touch (use words like 'Lovely', 'Perfect choice', 'Vanakkam' occasionally).
-    Context: User is looking at ${window.JewelsState.currentType || "nothing yet"}.
-    Available Categories: Earrings, Chains, Rings, Bangles.
-    Goal:
-    1. If user asks for a category, suggest it enthusiastically.
-    2. If user compliments, thank them.
-    3. Keep response SHORT (under 2 sentences) for speech synthesis.
-    `;
-
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`;
-    
-    const payload = {
-        contents: [{
-            parts: [
-                { text: systemPrompt },
-                { text: `User said: "${userText}"` }
-            ]
-        }]
-    };
-
-    try {
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-        
-        const data = await response.json();
-        const reply = data.candidates[0].content.parts[0].text;
-        concierge.speak(reply);
-        
-    } catch (error) {
-        console.error("Gemini Error:", error);
-        concierge.speak("I'm having trouble connecting to the cloud, but I am still here.");
-    }
-}
-
+function toggleVoiceControl() { if (!recognition) { initVoiceControl(); return; } voiceEnabled = !voiceEnabled; if (!voiceEnabled) { recognition.stop(); if(voiceBtn) { voiceBtn.innerHTML = '🔇'; voiceBtn.classList.add('voice-off'); } } else { try { recognition.start(); } catch(e) {} if(voiceBtn) { voiceBtn.innerHTML = '🎙️'; voiceBtn.classList.remove('voice-off'); } } }
 function processVoiceCommand(cmd) { 
-    const cleanCmd = cmd.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,""); 
-    
-    // 1. Fast Actions
-    if (cleanCmd.includes('next') || cleanCmd.includes('change')) { changeProduct(1); triggerVisualFeedback("Next"); return; } 
-    if (cleanCmd.includes('back') || cleanCmd.includes('previous')) { changeProduct(-1); triggerVisualFeedback("Previous"); return; } 
-    if (cleanCmd.includes('photo') || cleanCmd.includes('capture') || cleanCmd.includes('selfie')) { takeSnapshot(); return; } 
-    if (cleanCmd.includes('mix') || cleanCmd.includes('match') || cleanCmd.includes('stack')) { toggleStacking(); return; }
-
-    // 2. Category Switches
-    if (cleanCmd.includes('earring') || cleanCmd.includes('jhumka')) { selectJewelryType('earrings'); concierge.speak("Showing earrings."); return; }
-    if (cleanCmd.includes('chain') || cleanCmd.includes('necklace')) { selectJewelryType('chains'); concierge.speak("Showing chains."); return; }
-    if (cleanCmd.includes('ring')) { selectJewelryType('rings'); concierge.speak("Switching to rings."); return; }
-    if (cleanCmd.includes('bangle') || cleanCmd.includes('bracelet')) { selectJewelryType('bangles'); concierge.speak("Switching to bangles."); return; }
-
-    // 3. Fallback to Gemini
-    askGemini(cmd);
+    cmd = cmd.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,""); 
+    if (cmd.includes('next') || cmd.includes('change')) { changeProduct(1); triggerVisualFeedback("Next"); } 
+    else if (cmd.includes('back') || cmd.includes('previous')) { changeProduct(-1); triggerVisualFeedback("Previous"); } 
+    else if (cmd.includes('photo') || cmd.includes('capture')) takeSnapshot(); 
+    else if (cmd.includes('earring')) selectJewelryType('earrings'); 
+    else if (cmd.includes('chain')) selectJewelryType('chains'); 
+    else if (cmd.includes('ring')) selectJewelryType('rings'); 
+    else if (cmd.includes('bangle')) selectJewelryType('bangles'); 
 }
 
-/* --- 8. CAMERA & TRACKING (MOBILE FIXED) --- */
+/* --- 8. CAMERA & TRACKING --- */
 async function startCameraFast(mode = 'user') {
-    // 1. Security Check
-    if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
-        alert("⚠️ CRITICAL ERROR ⚠️\n\nCamera requires HTTPS.\nPlease deploy to Netlify/Vercel.");
-        loadingStatus.innerText = "Secure Connection Required";
-        return;
-    }
-
-    if (!coShop.isHost && coShop.active) return;
+    if (!coShop.isHost && coShop.active) return; 
     if (videoElement.srcObject && currentCameraMode === mode && videoElement.readyState >= 2) return;
     currentCameraMode = mode;
-
     if (videoElement.srcObject) { videoElement.srcObject.getTracks().forEach(track => track.stop()); }
-
-    if (mode === 'environment') { videoElement.classList.add('no-mirror'); } 
-    else { videoElement.classList.remove('no-mirror'); }
-
+    if (mode === 'environment') { videoElement.classList.add('no-mirror'); } else { videoElement.classList.remove('no-mirror'); }
     try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: mode, width: { ideal: 1280 }, height: { ideal: 720 } },
-            audio: false
-        });
-        handleStreamSuccess(stream);
-
-    } catch (err) {
-        console.warn("HQ Camera failed, trying fallback...", err);
-        try {
-            // Attempt 2: Low Quality Fallback
-            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: mode }, audio: false });
-            handleStreamSuccess(stream);
-        } catch (finalErr) {
-            alert("Camera Permission Denied or Not Supported.");
-            showStartButton(); 
-        }
-    }
-}
-
-function handleStreamSuccess(stream) {
-    videoElement.srcObject = stream;
-    videoElement.setAttribute('autoplay', '');
-    videoElement.setAttribute('muted', '');
-    videoElement.setAttribute('playsinline', '');
-
-    const playPromise = videoElement.play();
-    if (playPromise !== undefined) {
-        playPromise.then(() => {
-            console.log("Camera playing.");
-            detectLoop(); 
-            if(!recognition) initVoiceControl();
-        }).catch(error => {
-            console.warn("Auto-play blocked. Showing manual start button.");
-            showStartButton();
-        });
-    }
-}
-
-function showStartButton() {
-    if (document.getElementById('force-start-btn')) return;
-    const btn = document.createElement('button');
-    btn.id = 'force-start-btn';
-    btn.innerText = "TAP TO START CAMERA";
-    btn.style.cssText = `position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 20px 40px; background: #d4af37; color: black; font-size: 20px; font-weight: bold; border: none; border-radius: 50px; z-index: 99999; box-shadow: 0 0 20px rgba(212, 175, 55, 0.8); cursor: pointer; animation: pulse 1.5s infinite;`;
-    btn.onclick = () => { videoElement.play(); detectLoop(); if(!recognition) initVoiceControl(); btn.remove(); loadingStatus.style.display='none'; };
-    document.body.appendChild(btn);
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: mode } });
+        videoElement.srcObject = stream;
+        videoElement.onloadeddata = () => { videoElement.play(); detectLoop(); if(!recognition) initVoiceControl(); };
+    } catch (err) { console.error("Camera Error", err); }
 }
 
 async function detectLoop() {
@@ -581,6 +427,7 @@ function calculateAngle(p1, p2) { return Math.atan2(p2.y - p1.y, p2.x - p1.x); }
 hands.onResults((results) => {
   const w = videoElement.videoWidth; const h = videoElement.videoHeight;
   
+  /* --- FIX: GESTURE DETECTION (MIRRORED LOGIC) --- */
   if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
       const lm = results.multiHandLandmarks[0];
       const indexTipX = lm[8].x; 
@@ -589,9 +436,14 @@ hands.onResults((results) => {
           if (previousHandX !== null) {
               const diff = indexTipX - previousHandX;
               if (Math.abs(diff) > 0.04) { 
+                  // In Mirrored view:
+                  // Physical LEFT Swipe = Hand moves RIGHT on screen (diff > 0) -> Previous (-1)
+                  // Physical RIGHT Swipe = Hand moves LEFT on screen (diff < 0) -> Next (1)
                   const dir = (diff > 0) ? -1 : 1; 
+                  
                   changeProduct(dir); 
                   triggerVisualFeedback(dir === -1 ? "⬅️ Previous" : "Next ➡️");
+                  
                   lastGestureTime = Date.now(); 
                   previousHandX = null; 
               }
@@ -601,6 +453,7 @@ hands.onResults((results) => {
   } else { 
       previousHandX = null; 
   }
+  /* ------------------------------- */
 
   const ringImg = window.JewelsState.active.rings;
   const bangleImg = window.JewelsState.active.bangles;
@@ -651,7 +504,7 @@ hands.onResults((results) => {
   canvasCtx.restore();
 });
 
-/* --- 10. CAPTURE LOGIC --- */
+/* --- 10. CAPTURE LOGIC (Secure Screenshot) --- */
 function captureToGallery() {
     const tempCanvas = document.createElement('canvas'); 
     tempCanvas.width = videoElement.videoWidth; 
@@ -663,10 +516,13 @@ function captureToGallery() {
     
     tempCtx.drawImage(videoElement, 0, 0); 
     tempCtx.setTransform(1, 0, 0, 1, 0, 0);
-    try { tempCtx.drawImage(canvasElement, 0, 0); } catch(e) {}
+    
+    try { tempCtx.drawImage(canvasElement, 0, 0); } 
+    catch(e) { console.error("Snapshot Warning: AR Canvas tainted/missing.", e); }
     
     let cleanName = currentAssetName.replace(/\.(png|jpg|jpeg|webp)$/i, "").replace(/_/g, " "); 
     cleanName = cleanName.charAt(0).toUpperCase() + cleanName.slice(1);
+    
     const padding = tempCanvas.width * 0.04; 
     const titleSize = tempCanvas.width * 0.045; 
     const descSize = tempCanvas.width * 0.035; 
@@ -676,25 +532,34 @@ function captureToGallery() {
     gradient.addColorStop(0, "rgba(0,0,0,0)"); 
     gradient.addColorStop(0.2, "rgba(0,0,0,0.8)"); 
     gradient.addColorStop(1, "rgba(0,0,0,0.95)");
+    
     tempCtx.fillStyle = gradient; 
     tempCtx.fillRect(0, tempCanvas.height - contentHeight - padding, tempCanvas.width, contentHeight + padding);
     
     tempCtx.font = `bold ${titleSize}px Playfair Display, serif`; 
     tempCtx.fillStyle = "#d4af37"; tempCtx.textAlign = "left"; tempCtx.textBaseline = "top"; 
     tempCtx.fillText("Product Description", padding, tempCanvas.height - contentHeight);
+    
     tempCtx.font = `${descSize}px Montserrat, sans-serif`; 
     tempCtx.fillStyle = "#ffffff"; tempCtx.fillText(cleanName, padding, tempCanvas.height - contentHeight + (titleSize * 1.5));
     
     if (watermarkImg.complete) { 
         const wWidth = tempCanvas.width * 0.25; 
         const wHeight = (watermarkImg.height / watermarkImg.width) * wWidth; 
-        try { tempCtx.drawImage(watermarkImg, tempCanvas.width - wWidth - padding, padding, wWidth, wHeight); } catch(e) {}
+        try { tempCtx.drawImage(watermarkImg, tempCanvas.width - wWidth - padding, padding, wWidth, wHeight); } 
+        catch(e) { console.log("Watermark draw skipped"); }
     }
     
-    try { return { url: tempCanvas.toDataURL('image/png'), name: `Jewels-Ai_${Date.now()}.png` }; } catch(e) { return null; }
+    try {
+        const dataUrl = tempCanvas.toDataURL('image/png'); 
+        return { url: dataUrl, name: `Jewels-Ai_${Date.now()}.png` }; 
+    } catch(e) {
+        console.error("CRITICAL: Canvas Tainted.", e);
+        return null;
+    }
 }
 
-/* --- 11. GALLERY LOGIC --- */
+/* --- 11. TRY ALL & GALLERY LOGIC --- */
 function takeSnapshot() {
     triggerFlash(); 
     const data = captureToGallery();
@@ -705,37 +570,82 @@ function takeSnapshot() {
         if(concierge.active) concierge.speak("Captured perfectly!");
     }
 }
-function toggleTryAll() { if (!window.JewelsState.currentType) { alert("Select category!"); return; } if (autoTryRunning) stopAutoTry(); else startAutoTry(); }
+
+function toggleTryAll() { 
+    if (!window.JewelsState.currentType) { alert("Select category!"); return; } 
+    if (autoTryRunning) stopAutoTry(); else startAutoTry(); 
+}
 function startAutoTry() { autoTryRunning = true; autoSnapshots = []; autoTryIndex = 0; document.getElementById('tryall-btn').textContent = "STOP"; runAutoStep(); }
-function stopAutoTry() { autoTryRunning = false; clearTimeout(autoTryTimeout); document.getElementById('tryall-btn').textContent = "Try All"; if (autoSnapshots.length > 0) showGallery(); }
+function stopAutoTry() { 
+    autoTryRunning = false; clearTimeout(autoTryTimeout); 
+    document.getElementById('tryall-btn').textContent = "Try All"; 
+    if (autoSnapshots.length > 0) showGallery(); 
+}
 async function runAutoStep() { 
     if (!autoTryRunning) return; 
     const assets = JEWELRY_ASSETS[window.JewelsState.currentType]; 
     if (!assets || autoTryIndex >= assets.length) { stopAutoTry(); return; } 
+    
     const asset = assets[autoTryIndex]; 
     const highResImg = await loadAsset(asset.fullSrc, asset.id); 
-    setActiveARImage(highResImg); currentAssetName = asset.name; 
-    autoTryTimeout = setTimeout(() => { triggerFlash(); const data = captureToGallery(); if (data) autoSnapshots.push(data); autoTryIndex++; runAutoStep(); }, 1500); 
+    setActiveARImage(highResImg); 
+    currentAssetName = asset.name; 
+    
+    // Wait for render, then snap
+    autoTryTimeout = setTimeout(() => { 
+        triggerFlash(); 
+        const data = captureToGallery(); 
+        if (data) autoSnapshots.push(data); 
+        autoTryIndex++; 
+        runAutoStep(); 
+    }, 1500); 
 }
+
+/* --- 12. GALLERY & LIGHTBOX --- */
 function showGallery() {
-    const grid = document.getElementById('gallery-grid'); grid.innerHTML = '';
-    if (autoSnapshots.length === 0) grid.innerHTML = '<p style="color:#888; text-align:center;">No items captured.</p>';
+    const grid = document.getElementById('gallery-grid');
+    grid.innerHTML = ''; // Clear previous
+    
+    if (autoSnapshots.length === 0) {
+        grid.innerHTML = '<p style="color:#888; text-align:center; width:100%;">No items captured.</p>';
+    }
+
     autoSnapshots.forEach((item, index) => {
-        const card = document.createElement('div'); card.className = "gallery-card";
-        const img = document.createElement('img'); img.src = item.url; img.className = "gallery-img";
-        const overlay = document.createElement('div'); overlay.className = "gallery-overlay";
-        let cleanName = item.name.replace("Jewels-Ai_", "").substring(0,12);
+        const card = document.createElement('div'); 
+        card.className = "gallery-card";
+        
+        const img = document.createElement('img'); 
+        img.src = item.url; 
+        img.className = "gallery-img";
+        
+        const overlay = document.createElement('div'); 
+        overlay.className = "gallery-overlay";
+        let cleanName = item.name.replace("Jewels-Ai_", "").replace(".png", "").substring(0,12);
         overlay.innerHTML = `<span class="overlay-text">${cleanName}</span><div class="overlay-icon">👁️</div>`;
-        card.onclick = () => { currentLightboxIndex = index; document.getElementById('lightbox-image').src = item.url; document.getElementById('lightbox-overlay').style.display = 'flex'; };
+        
+        // CLICK TO OPEN LIGHTBOX
+        card.onclick = () => { 
+            currentLightboxIndex = index;
+            document.getElementById('lightbox-image').src = item.url;
+            document.getElementById('lightbox-overlay').style.display = 'flex';
+        };
+        
         card.appendChild(img); card.appendChild(overlay); grid.appendChild(card);
     });
+    
     document.getElementById('gallery-modal').style.display = 'flex';
 }
+
 function changeLightboxImage(dir) {
     if (autoSnapshots.length === 0) return;
     currentLightboxIndex = (currentLightboxIndex + dir + autoSnapshots.length) % autoSnapshots.length;
     document.getElementById('lightbox-image').src = autoSnapshots[currentLightboxIndex].url;
 }
+
+/* --- CLOSE FUNCTIONS (Global) --- */
+function closePreview() { document.getElementById('preview-modal').style.display = 'none'; }
+function closeGallery() { document.getElementById('gallery-modal').style.display = 'none'; }
+function closeLightbox() { document.getElementById('lightbox-overlay').style.display = 'none'; }
 
 /* --- EXPORTS --- */
 window.selectJewelryType = selectJewelryType; 
