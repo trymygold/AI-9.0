@@ -6,7 +6,7 @@
 /* --- 1. GLOBAL VARIABLES & RESET --- */
 :root {
   --accent: #d4af37;           /* Premium Gold */
-  --accent-glow: rgba(212, 175, 55, 0.4);
+  --accent-glow: rgba(212, 176, 55, 0.4);
   --bg: #000;
   --text-main: #fff;
 }
