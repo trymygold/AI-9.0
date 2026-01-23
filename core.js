@@ -1,4 +1,4 @@
-/* core.js - Jewels-Ai: Master Engine (v12.4 - Concierge Removed) */
+/* core.js - Jewels-Ai: Master Engine (v11.6 - Fixed Mix & Match) */
 
 /* --- CONFIGURATION --- */
 const API_KEY = "AIzaSyAXG3iG2oQjUA_BpnO8dK8y-MHJ7HLrhyE"; 
@@ -90,7 +90,76 @@ function triggerVisualFeedback(text) {
     setTimeout(() => { feedback.remove(); }, 1000); 
 }
 
-/* --- 2. CO-SHOPPING ENGINE --- */
+/* --- 2. AI CONCIERGE "NILA" --- */
+const concierge = {
+    synth: window.speechSynthesis,
+    voice: null,
+    active: true,
+    hasStarted: false,
+    
+    init: function() {
+        if (speechSynthesis.onvoiceschanged !== undefined) {
+            speechSynthesis.onvoiceschanged = this.setVoice;
+        }
+        this.setVoice();
+        setTimeout(() => {
+            const bubble = document.getElementById('ai-bubble');
+            if(bubble) {
+                bubble.innerText = "Tap me to activate Nila";
+                bubble.classList.add('bubble-visible');
+            }
+        }, 1000);
+    },
+
+    setVoice: function() {
+        const voices = window.speechSynthesis.getVoices();
+        concierge.voice = voices.find(v => v.name.includes("Google US English") || v.name.includes("Female")) || voices[0];
+    },
+
+    speak: function(text) {
+        if (!this.active || !this.synth) return;
+        const bubble = document.getElementById('ai-bubble');
+        const avatar = document.getElementById('ai-avatar');
+        if(bubble) { bubble.innerText = text; bubble.classList.add('bubble-visible'); }
+        if(avatar) avatar.classList.add('talking');
+
+        if (this.hasStarted) {
+            this.synth.cancel();
+            const utter = new SpeechSynthesisUtterance(text);
+            utter.voice = this.voice;
+            utter.rate = 1.0; 
+            utter.pitch = 1.1;
+            utter.onend = () => {
+                if(bubble) setTimeout(() => bubble.classList.remove('bubble-visible'), 3000);
+                if(avatar) avatar.classList.remove('talking');
+            };
+            this.synth.speak(utter);
+        } else {
+            setTimeout(() => {
+                 if(avatar) avatar.classList.remove('talking');
+                 if(bubble) bubble.classList.remove('bubble-visible');
+            }, 3000);
+        }
+    },
+
+    toggle: function() {
+        if (!this.hasStarted) {
+            this.hasStarted = true;
+            this.speak("Namaste! I am Nila. I am now active. Select a jewelry category.");
+            if(!voiceEnabled) toggleVoiceControl();
+            return;
+        }
+        this.active = !this.active;
+        if(this.active) this.speak("I am listening.");
+        else { 
+            this.synth.cancel(); 
+            const bubble = document.getElementById('ai-bubble');
+            if(bubble) bubble.innerText = "Muted"; 
+        }
+    }
+};
+
+/* --- 3. CO-SHOPPING ENGINE --- */
 const coShop = {
     peer: null, conn: null, myId: null, active: false, isHost: false, 
     init: function() {
@@ -109,7 +178,7 @@ const coShop = {
     activateUI: function() { this.active = true; document.getElementById('voting-ui').style.display = 'flex'; document.getElementById('coshop-btn').style.color = '#00ff00'; }
 };
 
-/* --- 3. ASSET LOADING --- */
+/* --- 4. ASSET LOADING --- */
 function initBackgroundFetch() { Object.keys(DRIVE_FOLDERS).forEach(key => fetchCategoryData(key)); }
 
 function fetchCategoryData(category) {
@@ -156,12 +225,13 @@ function setActiveARImage(img) {
     else if (type === 'bangles') window.JewelsState.active.bangles = img;
 }
 
-/* --- 4. APP INIT --- */
+/* --- 5. APP INIT --- */
 window.onload = async () => {
     initBackgroundFetch();
     coShop.init(); 
-    // concierge.init() REMOVED
+    concierge.init();
     
+    // --- FIX: MANUAL CLOSE BUTTON BINDING ---
     const closePrev = document.querySelector('.close-preview');
     if(closePrev) closePrev.onclick = closePreview;
     
@@ -170,22 +240,16 @@ window.onload = async () => {
     
     const closeLight = document.querySelector('.close-lightbox');
     if(closeLight) closeLight.onclick = closeLightbox;
+    // ----------------------------------------
 
     await startCameraFast('user');
-    
-    // Safety check for mobile
-    setTimeout(() => {
-        if(videoElement.paused || videoElement.readyState < 2) {
-             showStartButton();
-             loadingStatus.style.display = 'none';
-        }
-    }, 2500);
-
     setTimeout(() => { loadingStatus.style.display = 'none'; }, 2000);
     await selectJewelryType('earrings');
 };
 
-/* --- 5. LOGIC: SELECTION & STACKING --- */
+/* --- 6. LOGIC: SELECTION & STACKING --- */
+
+/* --- ADDED: Mix & Match Toggle Function --- */
 function toggleStacking() {
     window.JewelsState.stackingEnabled = !window.JewelsState.stackingEnabled;
     const btn = document.getElementById('stacking-btn');
@@ -193,6 +257,7 @@ function toggleStacking() {
     if (window.JewelsState.stackingEnabled) {
         if(btn) btn.classList.add('active');
         showToast("Mix & Match: ON");
+        if(concierge.active) concierge.speak("Stacking enabled. Select another category.");
     } else {
         if(btn) btn.classList.remove('active');
         showToast("Mix & Match: OFF");
@@ -202,15 +267,16 @@ function toggleStacking() {
         Object.keys(window.JewelsState.active).forEach(key => {
             if (key !== current) window.JewelsState.active[key] = null;
         });
-        showToast("Single mode active.");
+        if(concierge.active) concierge.speak("Single mode active.");
     }
 }
+/* ------------------------------------------ */
 
 async function selectJewelryType(type) {
   if (window.JewelsState.currentType === type && type !== undefined) return;
   window.JewelsState.currentType = type;
   
-  // concierge speak REMOVED
+  if(concierge.hasStarted) concierge.speak(`Selected ${type}.`);
   
   const targetMode = (type === 'rings' || type === 'bangles') ? 'environment' : 'user';
   startCameraFast(targetMode); 
@@ -265,7 +331,7 @@ function highlightButtonByIndex(index) {
     }
 }
 
-/* --- 6. VOICE CONTROL --- */
+/* --- 7. VOICE CONTROL --- */
 function initVoiceControl() {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) { if(voiceBtn) voiceBtn.style.display = 'none'; return; }
@@ -287,69 +353,18 @@ function processVoiceCommand(cmd) {
     else if (cmd.includes('bangle')) selectJewelryType('bangles'); 
 }
 
-/* --- 7. CAMERA & TRACKING (MOBILE FIXED) --- */
+/* --- 8. CAMERA & TRACKING --- */
 async function startCameraFast(mode = 'user') {
-    if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
-        alert("⚠️ CRITICAL ERROR ⚠️\n\nCamera requires HTTPS.\nPlease deploy to Netlify/Vercel.");
-        loadingStatus.innerText = "Secure Connection Required";
-        return;
-    }
-
-    if (!coShop.isHost && coShop.active) return;
+    if (!coShop.isHost && coShop.active) return; 
     if (videoElement.srcObject && currentCameraMode === mode && videoElement.readyState >= 2) return;
     currentCameraMode = mode;
-
     if (videoElement.srcObject) { videoElement.srcObject.getTracks().forEach(track => track.stop()); }
-
-    if (mode === 'environment') { videoElement.classList.add('no-mirror'); } 
-    else { videoElement.classList.remove('no-mirror'); }
-
+    if (mode === 'environment') { videoElement.classList.add('no-mirror'); } else { videoElement.classList.remove('no-mirror'); }
     try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: mode, width: { ideal: 1280 }, height: { ideal: 720 } },
-            audio: false
-        });
-        handleStreamSuccess(stream);
-
-    } catch (err) {
-        console.warn("HQ Camera failed, trying fallback...", err);
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: mode }, audio: false });
-            handleStreamSuccess(stream);
-        } catch (finalErr) {
-            alert("Camera Permission Denied or Not Supported.");
-            showStartButton(); 
-        }
-    }
-}
-
-function handleStreamSuccess(stream) {
-    videoElement.srcObject = stream;
-    videoElement.setAttribute('autoplay', '');
-    videoElement.setAttribute('muted', '');
-    videoElement.setAttribute('playsinline', '');
-
-    const playPromise = videoElement.play();
-    if (playPromise !== undefined) {
-        playPromise.then(() => {
-            console.log("Camera playing.");
-            detectLoop(); 
-            if(!recognition) initVoiceControl();
-        }).catch(error => {
-            console.warn("Auto-play blocked. Showing manual start button.");
-            showStartButton();
-        });
-    }
-}
-
-function showStartButton() {
-    if (document.getElementById('force-start-btn')) return;
-    const btn = document.createElement('button');
-    btn.id = 'force-start-btn';
-    btn.innerText = "TAP TO START CAMERA";
-    btn.style.cssText = `position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 20px 40px; background: #d4af37; color: black; font-size: 20px; font-weight: bold; border: none; border-radius: 50px; z-index: 99999; box-shadow: 0 0 20px rgba(212, 175, 55, 0.8); cursor: pointer; animation: pulse 1.5s infinite;`;
-    btn.onclick = () => { videoElement.play(); detectLoop(); if(!recognition) initVoiceControl(); btn.remove(); loadingStatus.style.display='none'; };
-    document.body.appendChild(btn);
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: mode } });
+        videoElement.srcObject = stream;
+        videoElement.onloadeddata = () => { videoElement.play(); detectLoop(); if(!recognition) initVoiceControl(); };
+    } catch (err) { console.error("Camera Error", err); }
 }
 
 async function detectLoop() {
@@ -360,7 +375,7 @@ async function detectLoop() {
     requestAnimationFrame(detectLoop);
 }
 
-/* --- 8. RENDER LOOPS --- */
+/* --- 9. RENDER LOOPS --- */
 const faceMesh = new FaceMesh({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}` });
 faceMesh.setOptions({ refineLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
 faceMesh.onResults((results) => {
@@ -412,6 +427,7 @@ function calculateAngle(p1, p2) { return Math.atan2(p2.y - p1.y, p2.x - p1.x); }
 hands.onResults((results) => {
   const w = videoElement.videoWidth; const h = videoElement.videoHeight;
   
+  /* --- FIX: GESTURE DETECTION (MIRRORED LOGIC) --- */
   if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
       const lm = results.multiHandLandmarks[0];
       const indexTipX = lm[8].x; 
@@ -420,9 +436,14 @@ hands.onResults((results) => {
           if (previousHandX !== null) {
               const diff = indexTipX - previousHandX;
               if (Math.abs(diff) > 0.04) { 
+                  // In Mirrored view:
+                  // Physical LEFT Swipe = Hand moves RIGHT on screen (diff > 0) -> Previous (-1)
+                  // Physical RIGHT Swipe = Hand moves LEFT on screen (diff < 0) -> Next (1)
                   const dir = (diff > 0) ? -1 : 1; 
+                  
                   changeProduct(dir); 
                   triggerVisualFeedback(dir === -1 ? "⬅️ Previous" : "Next ➡️");
+                  
                   lastGestureTime = Date.now(); 
                   previousHandX = null; 
               }
@@ -432,6 +453,7 @@ hands.onResults((results) => {
   } else { 
       previousHandX = null; 
   }
+  /* ------------------------------- */
 
   const ringImg = window.JewelsState.active.rings;
   const bangleImg = window.JewelsState.active.bangles;
@@ -482,7 +504,7 @@ hands.onResults((results) => {
   canvasCtx.restore();
 });
 
-/* --- 9. CAPTURE LOGIC --- */
+/* --- 10. CAPTURE LOGIC (Secure Screenshot) --- */
 function captureToGallery() {
     const tempCanvas = document.createElement('canvas'); 
     tempCanvas.width = videoElement.videoWidth; 
@@ -494,10 +516,13 @@ function captureToGallery() {
     
     tempCtx.drawImage(videoElement, 0, 0); 
     tempCtx.setTransform(1, 0, 0, 1, 0, 0);
-    try { tempCtx.drawImage(canvasElement, 0, 0); } catch(e) {}
+    
+    try { tempCtx.drawImage(canvasElement, 0, 0); } 
+    catch(e) { console.error("Snapshot Warning: AR Canvas tainted/missing.", e); }
     
     let cleanName = currentAssetName.replace(/\.(png|jpg|jpeg|webp)$/i, "").replace(/_/g, " "); 
     cleanName = cleanName.charAt(0).toUpperCase() + cleanName.slice(1);
+    
     const padding = tempCanvas.width * 0.04; 
     const titleSize = tempCanvas.width * 0.045; 
     const descSize = tempCanvas.width * 0.035; 
@@ -507,25 +532,34 @@ function captureToGallery() {
     gradient.addColorStop(0, "rgba(0,0,0,0)"); 
     gradient.addColorStop(0.2, "rgba(0,0,0,0.8)"); 
     gradient.addColorStop(1, "rgba(0,0,0,0.95)");
+    
     tempCtx.fillStyle = gradient; 
     tempCtx.fillRect(0, tempCanvas.height - contentHeight - padding, tempCanvas.width, contentHeight + padding);
     
     tempCtx.font = `bold ${titleSize}px Playfair Display, serif`; 
     tempCtx.fillStyle = "#d4af37"; tempCtx.textAlign = "left"; tempCtx.textBaseline = "top"; 
     tempCtx.fillText("Product Description", padding, tempCanvas.height - contentHeight);
+    
     tempCtx.font = `${descSize}px Montserrat, sans-serif`; 
     tempCtx.fillStyle = "#ffffff"; tempCtx.fillText(cleanName, padding, tempCanvas.height - contentHeight + (titleSize * 1.5));
     
     if (watermarkImg.complete) { 
         const wWidth = tempCanvas.width * 0.25; 
         const wHeight = (watermarkImg.height / watermarkImg.width) * wWidth; 
-        try { tempCtx.drawImage(watermarkImg, tempCanvas.width - wWidth - padding, padding, wWidth, wHeight); } catch(e) {}
+        try { tempCtx.drawImage(watermarkImg, tempCanvas.width - wWidth - padding, padding, wWidth, wHeight); } 
+        catch(e) { console.log("Watermark draw skipped"); }
     }
     
-    try { return { url: tempCanvas.toDataURL('image/png'), name: `Jewels-Ai_${Date.now()}.png` }; } catch(e) { return null; }
+    try {
+        const dataUrl = tempCanvas.toDataURL('image/png'); 
+        return { url: dataUrl, name: `Jewels-Ai_${Date.now()}.png` }; 
+    } catch(e) {
+        console.error("CRITICAL: Canvas Tainted.", e);
+        return null;
+    }
 }
 
-/* --- 10. GALLERY LOGIC --- */
+/* --- 11. TRY ALL & GALLERY LOGIC --- */
 function takeSnapshot() {
     triggerFlash(); 
     const data = captureToGallery();
@@ -533,40 +567,85 @@ function takeSnapshot() {
         currentPreviewData = data;
         document.getElementById('preview-image').src = data.url;
         document.getElementById('preview-modal').style.display = 'flex';
-        // concierge.speak("Captured perfectly!"); REMOVED
+        if(concierge.active) concierge.speak("Captured perfectly!");
     }
 }
-function toggleTryAll() { if (!window.JewelsState.currentType) { alert("Select category!"); return; } if (autoTryRunning) stopAutoTry(); else startAutoTry(); }
+
+function toggleTryAll() { 
+    if (!window.JewelsState.currentType) { alert("Select category!"); return; } 
+    if (autoTryRunning) stopAutoTry(); else startAutoTry(); 
+}
 function startAutoTry() { autoTryRunning = true; autoSnapshots = []; autoTryIndex = 0; document.getElementById('tryall-btn').textContent = "STOP"; runAutoStep(); }
-function stopAutoTry() { autoTryRunning = false; clearTimeout(autoTryTimeout); document.getElementById('tryall-btn').textContent = "Try All"; if (autoSnapshots.length > 0) showGallery(); }
+function stopAutoTry() { 
+    autoTryRunning = false; clearTimeout(autoTryTimeout); 
+    document.getElementById('tryall-btn').textContent = "Try All"; 
+    if (autoSnapshots.length > 0) showGallery(); 
+}
 async function runAutoStep() { 
     if (!autoTryRunning) return; 
     const assets = JEWELRY_ASSETS[window.JewelsState.currentType]; 
     if (!assets || autoTryIndex >= assets.length) { stopAutoTry(); return; } 
+    
     const asset = assets[autoTryIndex]; 
     const highResImg = await loadAsset(asset.fullSrc, asset.id); 
-    setActiveARImage(highResImg); currentAssetName = asset.name; 
-    autoTryTimeout = setTimeout(() => { triggerFlash(); const data = captureToGallery(); if (data) autoSnapshots.push(data); autoTryIndex++; runAutoStep(); }, 1500); 
+    setActiveARImage(highResImg); 
+    currentAssetName = asset.name; 
+    
+    // Wait for render, then snap
+    autoTryTimeout = setTimeout(() => { 
+        triggerFlash(); 
+        const data = captureToGallery(); 
+        if (data) autoSnapshots.push(data); 
+        autoTryIndex++; 
+        runAutoStep(); 
+    }, 1500); 
 }
+
+/* --- 12. GALLERY & LIGHTBOX --- */
 function showGallery() {
-    const grid = document.getElementById('gallery-grid'); grid.innerHTML = '';
-    if (autoSnapshots.length === 0) grid.innerHTML = '<p style="color:#888; text-align:center;">No items captured.</p>';
+    const grid = document.getElementById('gallery-grid');
+    grid.innerHTML = ''; // Clear previous
+    
+    if (autoSnapshots.length === 0) {
+        grid.innerHTML = '<p style="color:#888; text-align:center; width:100%;">No items captured.</p>';
+    }
+
     autoSnapshots.forEach((item, index) => {
-        const card = document.createElement('div'); card.className = "gallery-card";
-        const img = document.createElement('img'); img.src = item.url; img.className = "gallery-img";
-        const overlay = document.createElement('div'); overlay.className = "gallery-overlay";
-        let cleanName = item.name.replace("Jewels-Ai_", "").substring(0,12);
+        const card = document.createElement('div'); 
+        card.className = "gallery-card";
+        
+        const img = document.createElement('img'); 
+        img.src = item.url; 
+        img.className = "gallery-img";
+        
+        const overlay = document.createElement('div'); 
+        overlay.className = "gallery-overlay";
+        let cleanName = item.name.replace("Jewels-Ai_", "").replace(".png", "").substring(0,12);
         overlay.innerHTML = `<span class="overlay-text">${cleanName}</span><div class="overlay-icon">👁️</div>`;
-        card.onclick = () => { currentLightboxIndex = index; document.getElementById('lightbox-image').src = item.url; document.getElementById('lightbox-overlay').style.display = 'flex'; };
+        
+        // CLICK TO OPEN LIGHTBOX
+        card.onclick = () => { 
+            currentLightboxIndex = index;
+            document.getElementById('lightbox-image').src = item.url;
+            document.getElementById('lightbox-overlay').style.display = 'flex';
+        };
+        
         card.appendChild(img); card.appendChild(overlay); grid.appendChild(card);
     });
+    
     document.getElementById('gallery-modal').style.display = 'flex';
 }
+
 function changeLightboxImage(dir) {
     if (autoSnapshots.length === 0) return;
     currentLightboxIndex = (currentLightboxIndex + dir + autoSnapshots.length) % autoSnapshots.length;
     document.getElementById('lightbox-image').src = autoSnapshots[currentLightboxIndex].url;
 }
+
+/* --- CLOSE FUNCTIONS (Global) --- */
+function closePreview() { document.getElementById('preview-modal').style.display = 'none'; }
+function closeGallery() { document.getElementById('gallery-modal').style.display = 'none'; }
+function closeLightbox() { document.getElementById('lightbox-overlay').style.display = 'none'; }
 
 /* --- EXPORTS --- */
 window.selectJewelryType = selectJewelryType; 
@@ -598,6 +677,7 @@ window.closePreview = closePreview;
 window.closeGallery = closeGallery;
 window.closeLightbox = closeLightbox;
 window.changeLightboxImage = changeLightboxImage; 
+window.toggleConciergeMute = () => concierge.toggle();
 window.initVoiceControl = initVoiceControl;
 window.toggleVoiceControl = toggleVoiceControl;
 function lerp(start, end, amt) { return (1 - amt) * start + amt * end; }
